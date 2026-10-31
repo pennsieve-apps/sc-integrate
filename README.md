@@ -155,31 +155,34 @@ Bad values exit with code 2 (as does an `INPUT_DIR` that is not a folder).
 ## Results on the demo data
 
 sc-qc output of Discover dataset 475 (C2 DRG, 10x Flex, 12 donors, one sample each; sc-prep
-capped samples at 3,000 nuclei): `data/work/drg-c2/integrate/` (the input of sc-annotate), cpu
-image, defaults (Harmony, `BATCH_COLUMN=auto` → `subject_id`, 3,000 HVGs, 50 PCs, resolution 1.0).
+capped samples at 3,000 nuclei), sc-qc run of 2026-10-31 14:37 EDT:
+`data/work/drg-c2/integrate/` (the input of sc-annotate), cpu image, defaults (Harmony,
+`BATCH_COLUMN=auto` → `subject_id`, 3,000 HVGs, 50 PCs, resolution 1.0).
 
-- 18,439 nuclei × 17,681 genes in every sample (819 genes not in every sample dropped: eight
+- 18,438 nuclei × 17,681 genes in every sample (819 genes not in every sample dropped: eight
   samples have 18,082 features, four have 18,099). The loess fit of the HVG step needs the wider
   span (0.5); the smallest sample has 165 nuclei.
 - **Mixing** (median iLISI, effective number of donors among a nucleus's 30 neighbours): 1.42 on
-  the PCA, **2.81** after Harmony (scaled 0.038 → 0.165). Cluster ASW 0.545 → 0.550.
-- **15 clusters**, 10–12 donors each except C02 and C11 (7 donors). By the mean log-normalized
-  expression of canonical genes: neuronal clusters C04, C07, C10, C12, C13 (SNAP25, RBFOX3);
-  FABP7/APOE-high clusters C03, C05, C08 (satellite glia); DCN-high C02, C06 (fibroblasts);
-  PECAM1/VWF C09 (endothelium); CD163 C11 (macrophages); MPZ/PRX C14 (myelinating Schwann cells);
-  RGS5/ACTA2 C15 (pericytes / smooth muscle); C01 is low in every marker. sc-annotate names them.
-- **Two groups of donors stay apart.** The four 18,099-feature samples (CC0032, CC0037, CC0048,
-  CC0050) put 0–8 % of their nuclei in the SNAP25-high clusters, the other eight 44–91 %, and only
-  45 % of the four samples' nuclei fall in clusters with at least 20 % nuclei from the other eight
-  (Harmony; scVI 31–34 %). Whether this is tissue content (how much ganglion vs root or capsule
-  was sampled) or a processing difference (the feature counts suggest a different probe set or
-  pipeline version) cannot be told from these data; check the markers (sc-markers) and the paper
-  before comparing conditions across the two groups, and consider a `COVARIATES` column for the
-  processing batch if the authors' metadata gives one.
-- **scVI** on the same data (cpu image, 20 epochs only, to time it): iLISI 1.42 → 2.05, 19 clusters.
-  With scvi-tools' default epochs (400 at this size) on a stand-in for sc-qc of the same samples
-  (20,204 nuclei, light filtering; native arm64): iLISI 1.47 → **3.00** (Harmony on the same
-  stand-in: 2.83), cluster ASW 0.547, 21 clusters: slightly more mixing, not a different picture.
+  the PCA, **2.84** after Harmony (scaled 0.038 → 0.167). Cluster ASW 0.546 → 0.550.
+- **15 clusters**, 8–12 donors each. By the mean log-normalized expression of canonical genes:
+  SNAP25-high C06, C09, C12 (neuronal; C04 and C14 resemble them with lower SNAP25); FABP7/APOE-high
+  C01, C05, C11 (satellite glia); DCN-high C02, C07 (fibroblasts); PECAM1/VWF C08 (endothelium);
+  CD163 C10 (macrophages); MPZ/PRX C13 (myelinating Schwann cells); RGS5/ACTA2 C15 (pericytes /
+  smooth muscle); C03 is low in every marker. sc-annotate names them.
+- **Two groups of donors differ in composition.** The four 18,099-feature samples (CC0032, CC0037,
+  CC0048, CC0050; 10,900 nuclei) put 0–6 % of their nuclei in the neuronal-like clusters
+  (C04, C06, C09, C12, C14), the other eight 39–88 %; the fibroblast, endothelial and macrophage
+  clusters (C02, C07, C08, C10) come almost only from the four (5,439 of 5,582 nuclei). The
+  satellite-glia clusters (C01, C05, C11) hold nuclei from both groups, so their glia do share
+  clusters after integration. This looks like tissue content (how much ganglion vs root, capsule
+  or vessels was sampled) more than a technical batch, but the feature counts also suggest a
+  different probe set or pipeline version for the four; check with the markers (sc-markers) and the
+  paper before comparing conditions across the two groups.
+- **scVI** on the same data (cpu image, 20 epochs only, to time it): iLISI 1.42 → 2.07, 19
+  clusters. With scvi-tools' default epochs (400 at this size) on an earlier stand-in for sc-qc of
+  the same samples (20,204 nuclei, light filtering; native arm64): iLISI 1.47 → **3.00** (Harmony on
+  the same stand-in: 2.83), cluster ASW 0.547, 21 clusters: slightly more mixing, not a different
+  picture.
 
 On the synthetic fixture (5 planted types, 3 samples with a planted gene-wise batch effect), both
 methods recover the planted types exactly (ARI 1.0 at resolution 0.3) and raise the scaled iLISI
@@ -189,30 +192,37 @@ from < 0.2 to > 0.4.
 
 `computeTypes: [standard]` (cpu variant), 4 vCPU / 16 GiB, 8 h timeout; gpu variant:
 `computeTypes: [gpu]`, 14 GiB. Measured in the linux/amd64 images under emulation on an M-series
-Mac (Docker, 4 CPUs; native x86 is several times faster):
+Mac (Docker, `--cpus 4`, `--memory 4g`/`4500m`; native x86 is faster):
 
 | Input | Method | Wall time | Peak RSS (cgroup peak) |
 |---|---|---|---|
-| DRG demo, 12 samples, 18,439 nuclei | Harmony | 122 s (HVG 12 s, PCA 3 s, Harmony 0.4 s, neighbours 82 s, UMAP 8 s, write 7 s) | 1.79 GB (2.00 GB) |
-| same | scVI, 20 epochs | 192 s (3.5 s per epoch) | 2.67 GB (2.89 GB) |
-| DRG demo ×5 (binomially thinned copies, 60 samples), 92,195 nuclei | Harmony | 241 s (neighbours 95 s, UMAP 42 s) | 2.67 GB (3.49 GB) |
+| DRG demo, 12 samples, 18,438 nuclei, 23.5 M non-zero counts | Harmony | 138 s (HVG 13 s, PCA 2 s, Harmony 0.5 s, neighbours 91 s, UMAP 9 s, write 9 s) | 2.22 GB (2.52 GB) |
+| same | scVI, 20 epochs | 220 s (3.9 s per epoch) | 2.49 GB (2.69 GB) |
+| DRG demo ×5 (binomially thinned copies of an earlier sc-qc run, 60 samples), 92,195 nuclei, 98.8 M non-zeros | Harmony | 221 s (neighbours 89 s, UMAP 42 s) | 2.42 GB (3.50 GB) |
 
-**Memory per nucleus.** The peak is reached while the counts of all samples are stacked for HVG
-selection: about **1.6 GiB + 12 bytes per non-zero count** (18,439 → 92,195 nuclei added 0.9 GB,
-1,070–1,270 detected genes per nucleus). That is **~80,000 nuclei per GiB** at ~1,100 genes per
-nucleus, or ~35,000 per GiB at 2,500; 300 k nuclei × 30 k genes with 3,000 detected genes each
-need ~12 GiB, inside the 16 GiB default (the convention's target is 30 GiB). scVI adds the HVG
-counts copy (~8 bytes per HVG non-zero) and PyTorch (~0.9 GB here); on the gpu tier's 14 GiB that
-leaves room for ~200 k nuclei at 2,500 genes each (estimated, not run on a GPU).
+**Memory.** Counts and HVGs are filled into preallocated arrays one sample at a time. Up to and
+including HVG selection the peak is about **0.5 GB + 14 bytes per non-zero count** (measured: 0.84
+GB at 23.5 M non-zeros, 1.90 GB at 98.8 M; the joint counts take 8 bytes per non-zero, scanpy's
+seurat_v3 statistics most of the rest). After that, the neighbour graph, UMAP and writing peak at
+about 2.2 GB plus ~3.4 KB per nucleus (2.22 GB at 18 k, 2.42 GB at 92 k nuclei). These are the
+cells-per-GiB figures: ~70 M non-zeros per GiB, i.e. ~65,000 nuclei per GiB at ~1,100 detected
+genes per nucleus or ~28,000 at 2,500. **Estimates** extrapolated from these two runs (not run):
+300 k nuclei × 30 k genes with 3,000 detected genes each (900 M non-zeros) need ~13 GB, inside the
+16 GiB default (the convention's target is 30 GiB); scVI adds a copy of the HVG counts (8 bytes per
+HVG non-zero) and PyTorch (~0.3 GB here), so the gpu tier's 14 GiB should hold ~200 k nuclei at
+2,500 genes each.
 
 **Time.** Harmony itself takes seconds; the neighbour graph and UMAP dominate (~minutes per 100 k
-nuclei). scVI on CPU: ~1.9 s per epoch per 10,000 nuclei here (emulated; 1.6 s per epoch for
-20,204 nuclei native arm64 on 4 threads), and scvi-tools' default epochs fall with size (400 below
-20 k nuclei, 27 at 300 k), so a CPU scVI run is ~25 min at either end; on a T4 GPU it should be far
-less (not measured: no local GPU). The gpu image was built and imports torch 2.15.0+cu132,
-scvi-tools and harmonypy, and runs the fixture on CPU.
+nuclei). scVI on CPU: 3.9 s per epoch for 18,438 nuclei here (emulated; 1.6 s per epoch for 20,204
+nuclei native arm64 on 4 threads), and scvi-tools' default epochs fall with size (400 below 20 k
+nuclei, 27 at 300 k), so a CPU scVI run is ~25 min at either end (estimate); on a GPU it should be
+far less (not measured: no local GPU).
 
-Images: cpu 1.48 GB unpacked (457 MB compressed); gpu 5.9 GB unpacked (3.2 GB compressed).
+**GPU image.** torch 2.14.1+cu126 (the platform's GPU nodes run NVIDIA driver 550, CUDA 12.4;
+CUDA 13 builds need driver ≥ 580). Built locally; imports torch (CUDA 12.6), scvi-tools 1.5.2,
+lightning 2.6.6 and harmonypy; without a GPU it stops at start with an error (exit 1), as intended.
+
+Images (unpacked, `du` inside the container): cpu 1.44 GB, gpu 6.97 GB.
 
 ## Running it locally
 
@@ -221,7 +231,8 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 make test PYTHON=.venv/bin/python       # pytest on the synthetic fixture (Harmony and scVI), no Docker
 make run PYTHON=.venv/bin/python        # cpu image over data/fixture/linked -> data/output/{cells,labels,integration}
 make image-gpu                          # the gpu variant's image (CUDA PyTorch)
-make validate PYTHON=.venv/bin/python   # app.yml and CITATION.cff
+make validate PYTHON=.venv/bin/python   # app.yml (jsonschema, Draft 2020-12) and CITATION.cff (pipx run cffconvert==2.0.0;
+                                        # set CFFCONVERT=... to use another install: it needs jsonschema < 4)
 ```
 
 By hand, on sc-qc output:

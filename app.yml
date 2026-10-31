@@ -32,9 +32,10 @@ application:
 runtime:
   # Shared by both variants (below); these are the cpu variant's. All samples are held at once
   # (counts CSR float32 while choosing HVGs, then HVGs only). Measured in the linux/amd64 image
-  # (amd64 emulation on an M-series Mac, 4 CPUs): DRG demo, 18,439 nuclei, Harmony 122 s, peak RSS
-  # 1.8 GB; 92,195 nuclei 241 s, 2.7 GB. Peak ~ 1.6 GiB + 12 bytes per non-zero count, so 16 GiB
-  # holds 300 k nuclei with up to ~3,500 detected genes each (README "Runtime").
+  # (amd64 emulation on an M-series Mac, 4 CPUs): DRG demo, 18,438 nuclei, Harmony 138 s, peak RSS
+  # 2.2 GB; 92,195 nuclei 221 s, 2.4 GB. Estimate from those runs: up to HVG selection ~0.5 GB +
+  # 14 bytes per non-zero count, so 300 k nuclei with 3,000 detected genes each need ~13 GB, inside
+  # 16 GiB (README "Runtime").
   cpu: 4096
   memory: 16384
   computeTypes:
@@ -172,9 +173,10 @@ variants:
   - id: gpu
     name: GPU (scVI)
     description: >-
-      CUDA PyTorch on an NVIDIA GPU (T4 or newer); scVI by default. The GPU tier's 14 GiB holds
-      about 200 k nuclei at 2,500 detected genes each (estimated); larger studies: the cpu variant
-      with METHOD=scvi and more memory.
+      CUDA 12.6 PyTorch (for the platform's NVIDIA driver 550) on an NVIDIA GPU; scVI by default.
+      Stops with an error when no GPU is visible. The GPU tier's 14 GiB should hold about 200 k
+      nuclei at 2,500 detected genes each (estimate); larger studies: the cpu variant with
+      METHOD=scvi and more memory.
     build:
       args:
         TORCH_FLAVOUR: cuda
