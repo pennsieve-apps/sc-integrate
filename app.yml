@@ -144,7 +144,7 @@ outputs:
   - name: labels
     description: >-
       labels/labels.csv (sample_id, obs_id, cluster), cluster_summary.csv (sample_id, cluster,
-      n_obs, fraction), summary.json, provenance.json.
+      n_obs, fraction), provenance.json.
     mediaTypes:
       - text/csv
       - application/json

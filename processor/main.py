@@ -57,36 +57,16 @@ COLUMN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 # DOIs of the methods each run uses; the report gathers them from provenance.json.
 CITATIONS = {
-    "scanpy": {"doi": "10.1186/s13059-017-1382-0", "pmid": "29409532",
-               "text": "Wolf FA, Angerer P, Theis FJ. SCANPY: large-scale single-cell gene expression data analysis. "
-                       "Genome Biol 2018;19:15."},
-    "anndata": {"doi": "10.21105/joss.04371", "pmid": None,
-                "text": "Virshup I, Rybakov S, Theis FJ, Angerer P, Wolf FA. anndata: Access and store annotated data "
-                        "matrices. J Open Source Softw 2024;9(101):4371."},
-    "seurat_v3 HVG": {"doi": "10.1016/j.cell.2019.05.031", "pmid": "31178118",
-                      "text": "Stuart T, Butler A, Hoffman P, et al. Comprehensive Integration of Single-Cell Data. "
-                              "Cell 2019;177(7):1888-1902.e21."},
-    "Harmony": {"doi": "10.1038/s41592-019-0619-0", "pmid": "31740819",
-                "text": "Korsunsky I, Millard N, Fan J, et al. Fast, sensitive and accurate integration of single-cell "
-                        "data with Harmony. Nat Methods 2019;16(12):1289-1296."},
-    "scVI": {"doi": "10.1038/s41592-018-0229-2", "pmid": "30504886",
-             "text": "Lopez R, Regier J, Cole MB, Jordan MI, Yosef N. Deep generative modeling for single-cell "
-                     "transcriptomics. Nat Methods 2018;15(12):1053-1058."},
-    "scvi-tools": {"doi": "10.1038/s41587-021-01206-w", "pmid": "35132262",
-                   "text": "Gayoso A, Lopez R, Xing G, et al. A Python library for probabilistic analysis of single-cell "
-                           "omics data. Nat Biotechnol 2022;40(2):163-166."},
-    "Leiden": {"doi": "10.1038/s41598-019-41695-z", "pmid": "30914743",
-               "text": "Traag VA, Waltman L, van Eck NJ. From Louvain to Leiden: guaranteeing well-connected "
-                       "communities. Sci Rep 2019;9:5233."},
-    "UMAP": {"doi": "10.21105/joss.00861", "pmid": None,
-             "text": "McInnes L, Healy J, Saul N, Großberger L. UMAP: Uniform Manifold Approximation and Projection. "
-                     "J Open Source Softw 2018;3(29):861."},
-    "scib": {"doi": "10.1038/s41592-021-01336-8", "pmid": "34949812",
-             "text": "Luecken MD, Büttner M, Chaichoompu K, et al. Benchmarking atlas-level data integration in "
-                     "single-cell genomics. Nat Methods 2022;19(1):41-50."},
-    "silhouette": {"doi": "10.1016/0377-0427(87)90125-7", "pmid": None,
-                   "text": "Rousseeuw PJ. Silhouettes: A graphical aid to the interpretation and validation of cluster "
-                           "analysis. J Comput Appl Math 1987;20:53-65."},
+    "scanpy": {"doi": "10.1186/s13059-017-1382-0", "pmid": "29409532", "text": "Wolf FA et al. Genome Biol 2018"},
+    "anndata": {"doi": "10.21105/joss.04371", "pmid": None, "text": "Virshup I et al. J Open Source Softw 2024"},
+    "seurat_v3 HVG": {"doi": "10.1016/j.cell.2019.05.031", "pmid": "31178118", "text": "Stuart T et al. Cell 2019"},
+    "Harmony": {"doi": "10.1038/s41592-019-0619-0", "pmid": "31740819", "text": "Korsunsky I et al. Nat Methods 2019"},
+    "scVI": {"doi": "10.1038/s41592-018-0229-2", "pmid": "30504886", "text": "Lopez R et al. Nat Methods 2018"},
+    "scvi-tools": {"doi": "10.1038/s41587-021-01206-w", "pmid": "35132262", "text": "Gayoso A et al. Nat Biotechnol 2022"},
+    "Leiden": {"doi": "10.1038/s41598-019-41695-z", "pmid": "30914743", "text": "Traag VA et al. Sci Rep 2019"},
+    "UMAP": {"doi": "10.21105/joss.00861", "pmid": None, "text": "McInnes L et al. J Open Source Softw 2018"},
+    "scib": {"doi": "10.1038/s41592-021-01336-8", "pmid": "34949812", "text": "Luecken MD et al. Nat Methods 2022"},
+    "silhouette": {"doi": "10.1016/0377-0427(87)90125-7", "pmid": None, "text": "Rousseeuw PJ. J Comput Appl Math 1987"},
 }
 
 
@@ -176,6 +156,25 @@ def app_version() -> str:
         return "unknown"
 
 
+def gpu_check() -> bool:
+    """In a CUDA image (TORCH_FLAVOUR=cuda) a GPU must be visible: never run a gpu variant on CPU.
+    Logs the device, torch's CUDA version and the driver."""
+    if os.environ.get("TORCH_FLAVOUR") != "cuda":
+        return True
+    import torch
+
+    if not torch.cuda.is_available():
+        log.error("CUDA image (TORCH_FLAVOUR=cuda, torch CUDA %s) but no GPU is visible: refusing to run on CPU",
+                  torch.version.cuda)
+        return False
+    try:
+        driver = Path("/proc/driver/nvidia/version").read_text().splitlines()[0].strip()
+    except (OSError, IndexError):
+        driver = "unknown"
+    log.info("GPU: %s, torch CUDA %s, driver: %s", torch.cuda.get_device_name(0), torch.version.cuda, driver)
+    return True
+
+
 def main() -> int:
     started = datetime.now(timezone.utc)
     t0 = time.monotonic()
@@ -194,13 +193,15 @@ def main() -> int:
     except ParameterError as exc:
         log.error("%s", exc)
         return 2
-    n_threads, thread_source = T.configure(params["THREADS"])
-    log.info("threads: %d (%s); method %s", n_threads, thread_source, params["METHOD"])
+    n_threads = T.configure(params["THREADS"])
+    log.info("threads: %d; method %s", n_threads, params["METHOD"])
+    if not gpu_check():
+        return 1
 
     # numpy and friends only after the thread variables are set
     import numpy as np
+    import anndata as ad
     import pandas as pd
-    import scipy.sparse as sp
 
     from processor import figures as F
     from processor import integrate as I
@@ -216,42 +217,52 @@ def main() -> int:
     required = [*([batch] if batch != "auto" else []), *covariates]
     timings: dict = {}
 
-    def rel(p: Path) -> str:
-        return str(p.relative_to(input_dir))
+    first = found.samples[0]
+    try:
+        found.root.check_h5(first.path)
+        absent = [c for c in required if c not in I.obs_columns(first.path)]
+    except Exception as exc:
+        absent = None
+        log.warning("%s: cannot check the obs columns: %s", first.sample_id, exc)
+    if absent:
+        log.error("BATCH_COLUMN / COVARIATES: %s is not an obs column (checked in %s)", ", ".join(absent), first.sample_id)
+        return 2
 
-    # --- pass 1: counts, one sample at a time -----------------------------------------------
+    # --- what each file holds (obs, genes, sizes), then pass 1: the counts --------------------
     t = time.monotonic()
-    parts, statuses, used = [], [], []
+    metas, statuses, used = [], [], []
     for s in found.samples:
-        ts = time.monotonic()
-        status = {"sample_id": s.sample_id, "file": rel(s.path)}
+        status = {"sample_id": s.sample_id, "file": found.root.rel(s.path)}
         try:
-            a, where = I.read_counts(s.path, s.sample_id, required)
-            parts.append(a)
+            found.root.check_h5(s.path)
+            m = I.read_meta(s.path, s.sample_id, required)
+            metas.append(m)
             used.append(s)
-            status.update(status="ok", n_obs=int(a.n_obs), n_genes=int(a.n_vars), counts_from=where)
-            log.info("%s: %d observations x %d genes, counts from %s, %.1fs", s.sample_id, a.n_obs, a.n_vars, where,
-                     time.monotonic() - ts)
+            status.update(status="ok", n_obs=len(m.obs), n_genes=len(m.genes), counts_from=m.counts_from)
+            log.info("%s: %d observations x %d genes, counts from %s", s.sample_id, len(m.obs), len(m.genes), m.counts_from)
         except Exception as exc:
             status.update(status="failed", error=f"{type(exc).__name__}: {exc}")
             log.error("%s: failed: %s", s.sample_id, exc)
         statuses.append(status)
-    if not parts:
+    if not metas:
         log.error("every sample failed")
         return 1
     if batch == "auto":
         # the donor when every sample says who it came from (one donor's samples share donor effects
         # and may differ in tissue or side, which integration should keep), else the sample
-        batch = "subject_id" if all("subject_id" in a.obs and (a.obs["subject_id"] != "nan").all() for a in parts) \
+        batch = "subject_id" if all("subject_id" in m.obs and m.obs["subject_id"].notna().all() for m in metas) \
             else "sample_id"
         if batch in covariates:
             log.error("COVARIATES must not repeat the batch column %s", batch)
             return 2
         log.info("BATCH_COLUMN=auto: batches are %s", batch)
-    joint, n_dropped = I.stack(parts)
-    sizes = [a.n_obs for a in parts]
-    n_shared = int(joint.n_vars)
-    del parts
+    obs = pd.concat([m.obs for m in metas])
+    for c in obs.columns:
+        obs[c] = obs[c].astype("category")
+    shared, n_dropped = I.shared_genes(metas)
+    n_shared = len(shared)
+    paths = [s.path for s in used]
+    joint = ad.AnnData(X=I.stack(paths, metas, shared, counts=True), obs=obs, var=pd.DataFrame(index=shared))
     timings["read_counts"] = round(time.monotonic() - t, 1)
     log.info("joint counts: %d observations x %d genes in every sample (%d genes not in every sample dropped), "
              "%d non-zeros, %.1fs, peak RSS %s MB", joint.n_obs, joint.n_vars, n_dropped, joint.X.nnz,
@@ -259,7 +270,7 @@ def main() -> int:
     if joint.n_obs < 20:
         log.error("only %d observations in total; nothing to integrate", joint.n_obs)
         return 1
-    batches = joint.obs[batch].astype(str).to_numpy()
+    batches = obs[batch].astype(str).to_numpy()
     n_batches = len(set(batches))
     if n_batches < 2:
         log.warning("%s has a single value: nothing to integrate, X_integrated is the %s of the one batch",
@@ -270,7 +281,6 @@ def main() -> int:
     hvg, span = I.highly_variable(joint, params["N_HVG"], batch)
     genes = hvg["gene"].tolist()
     counts = joint[:, genes].X.copy() if params["METHOD"] == "scvi" else None
-    obs = joint.obs
     del joint
     timings["hvg"] = round(time.monotonic() - t, 1)
     log.info("%d highly variable genes (seurat_v3 on counts, batch_key=%s, loess span %g), %.1fs", len(genes), batch, span,
@@ -278,10 +288,8 @@ def main() -> int:
 
     # --- pass 2: log-normalized X on the HVGs, joint PCA -------------------------------------
     t = time.monotonic()
-    offsets = np.cumsum([0, *sizes])
-    blocks = [I.read_lognorm(s.path, genes, obs.index[offsets[i]:offsets[i + 1]]) for i, s in enumerate(used)]
-    X_pca = I.pca(sp.vstack(blocks, format="csr"), params["N_PCS"], params["SEED"])
-    del blocks
+    offsets = np.cumsum([0, *(len(m.obs) for m in metas)])
+    X_pca = I.pca(I.stack(paths, metas, genes, counts=False), params["N_PCS"], params["SEED"])
     timings["pca"] = round(time.monotonic() - t, 1)
     log.info("PCA: %d components on the log-normalized HVGs, %.1fs", X_pca.shape[1], timings["pca"])
 
@@ -345,7 +353,9 @@ def main() -> int:
     timings["write"] = round(time.monotonic() - t, 1)
 
     sample_ids = obs["sample_id"].astype(str).to_numpy()
+    written = {s["sample_id"] for s in statuses if s["status"] == "ok"}
     frame = pd.DataFrame({"sample_id": sample_ids, "obs_id": obs.index.to_numpy(), "cluster": clusters})
+    frame = frame[frame["sample_id"].isin(written)]   # labels only for the cells whose file was written
     frame.to_csv(labels_dir / "labels.csv", index=False)
     table = pd.crosstab(frame["sample_id"], frame["cluster"])
     summary_rows = table.stack().rename("n_obs").reset_index()
@@ -360,10 +370,10 @@ def main() -> int:
 
     t = time.monotonic()
     figures = []
-    n_note = f" ({len(frame):,} observations)"
+    n_note = f" ({len(clusters):,} observations)"
     colourings = [("sample", sample_ids), ("cluster", clusters)]
     if "condition" in obs:
-        colourings.insert(1, ("condition", obs["condition"].astype(str).to_numpy()))
+        colourings.insert(1, ("condition", obs["condition"].astype(object).fillna("(missing)").astype(str).to_numpy()))
     if batch not in ("sample_id", "condition"):
         colourings.insert(1, (batch, batches))
     for name, values in colourings:
@@ -377,9 +387,10 @@ def main() -> int:
 
     per_cluster = []
     for c in cluster_order:
-        col = table[c]
-        per_cluster.append({"cluster": c, "n_obs": int(col.sum()), "n_samples": int((col > 0).sum()),
-                            "largest_sample_fraction": float(col.max() / col.sum())})
+        col = table[c] if c in table else pd.Series(dtype=int)
+        n = int(col.sum())
+        per_cluster.append({"cluster": c, "n_obs": n, "n_samples": int((col > 0).sum()),
+                            "largest_sample_fraction": float(col.max() / n) if n else None})
     n_failed = sum(1 for s in statuses if s["status"] != "ok")
     summary = {
         "n_samples": len(statuses) - n_failed, "n_failed": n_failed, "n_obs": int(len(frame)),
@@ -392,7 +403,7 @@ def main() -> int:
              "Leiden", "UMAP", "scib", "silhouette"]
     provenance = {
         "app": APP_NAME, "version": app_version(), "tools": tool_versions(params["METHOD"]), "parameters": params,
-        "threads": {"n": n_threads, "source": thread_source}, "integration": method_info,
+        "threads": n_threads, "integration": method_info,
         "method": {
             "hvg": f"scanpy.pp.highly_variable_genes(flavor=seurat_v3, n_top_genes={params['N_HVG']}, batch_key={batch}, span={span}) on counts",
             "pca": f"scanpy.pp.pca(n_comps={params['N_PCS']}) on the log-normalized X of the HVGs (not scaled)",
@@ -406,13 +417,13 @@ def main() -> int:
                        f"cluster ASW (sklearn silhouette, rescaled) on at most {I.MAX_OBS_FOR_METRICS} seeded observations",
         },
         "citations": [{k: v for k, v in CITATIONS[c].items() if v} for c in cites],
-        "inputs": [rel(p) for p in found.seen], "inputs_skipped": found.skipped,
-        "started": started.isoformat(), "finished": datetime.now(timezone.utc).isoformat(),
+        "inputs": found.seen, "inputs_skipped": found.skipped,
+        "started": started.isoformat(timespec="seconds"),
+        "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "timings_seconds": {**timings, "total": round(time.monotonic() - t0, 1)},
         "peak_rss_mb": peak_rss_mb(), "cgroup_peak_mb": cgroup_peak_mb(),
         "samples": statuses, "n_ok": len(statuses) - n_failed, "n_failed": n_failed,
     }
-    write_json(labels_dir / "summary.json", {k: summary[k] for k in ("n_samples", "n_obs", "n_clusters", "clusters", "parameters")})
     write_json(integ_dir / "summary.json", {**summary, "figures": figures})
     for d in (cells_dir, labels_dir, integ_dir):
         write_json(d / "provenance.json", {**provenance, "outputs": sorted(p.name for p in d.iterdir())})

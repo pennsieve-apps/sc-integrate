@@ -29,32 +29,46 @@ batch (`batch_key=BATCH_COLUMN`; Stuart et al. 2019). A joint PCA is computed on
 integrated embedding (`obsm["X_integrated"]`), followed by `scanpy.tl.umap`. Two metrics from the
 scib benchmark (Luecken et al. 2022) compare the integrated embedding with the uncorrected PCA.
 
-Why these two methods: the scib benchmark found that HVG selection improves integration, that
-scaling pushes methods towards batch removal at the cost of biology (so the PCA here is unscaled),
-and that scANVI, Scanorama, scVI and scGen perform well, particularly on complex integration tasks
-(Luecken et al. 2022). scVI needs no labels and scales to atlases on a GPU, so it is the gpu
-variant's default. Harmony needs no GPU and corrects 92,000 nuclei in about a second on CPU (the
-neighbour graph and UMAP take longer), so it is the cpu default.
+Why these choices. The scib benchmark (Luecken et al. 2022) found that HVG selection improves
+integration and that scaling pushes methods towards batch removal at the cost of biological
+variation, so the PCA here is on HVGs and unscaled; it also found that scANVI, Scanorama, scVI and
+scGen perform well, particularly on complex integration tasks. The integration chapter of the
+single-cell best-practices book (Zappia, Lücken, Kim, Heumos; sc-best-practices.org, cited as
+Heumos et al. 2023) selects HVGs batch-aware with `highly_variable_genes(batch_key=...)`, as here,
+and summarises the benchmarks as Harmony and Seurat performing well for simple batch correction
+and scVI, scGen, scANVI and Scanorama for complex integration. scVI needs no labels and scales to
+atlases on a GPU, so it is the gpu variant's default. Harmony needs no GPU and corrects 92,000
+nuclei in about a second on CPU (the neighbour graph and UMAP take longer), so it is the cpu
+default.
 
 ## Method
 
 1. **Inputs.** Every `<sample_id>.h5ad` in `cells/` (or anywhere under the input without links).
    The batches are `BATCH_COLUMN`; `auto` takes `subject_id`, the donor key sc-prep writes on every
    cell, when every sample has it, else `sample_id` (logged and recorded).
-   A file that cannot be read, lacks `BATCH_COLUMN` or a covariate in `obs`, or has more than 1.5
-   billion non-zeros is logged and skipped; the run fails (exit 1) only when no sample is usable.
-2. **Counts, pass 1.** `layers["counts"]` (else `X`) of each sample, one at a time, stacked as CSR
-   float32 on the genes in every sample (the number dropped is logged and in `summary.json`).
+   `BATCH_COLUMN` and `COVARIATES` are checked against the first sample's `obs` before anything is
+   read (exit 2 when missing). Every file is checked with `safe_inputs` (the platform's symlink
+   rule; no HDF5 external links, external storage or virtual datasets). A file that cannot be read,
+   lacks a requested column or has missing values in it, or whose matrix would need more than half
+   the container's memory limit is logged and skipped; the run fails (exit 1) only when no sample
+   is usable.
+2. **Counts, pass 1.** A first look at each file reads its `obs`, genes and matrix sizes only. Then
+   `layers["counts"]` (else `X`) of each sample, one at a time, is copied into one preallocated CSR
+   float32 matrix on the genes in every sample, so the peak is the joint matrix plus one sample
+   (the number of genes dropped is logged and in `integration/summary.json`).
 3. **HVGs.** `scanpy.pp.highly_variable_genes(flavor="seurat_v3", n_top_genes=N_HVG,
    batch_key=BATCH_COLUMN)`. Seurat's loess span of 0.3 can be singular for a batch of ~200
    nuclei; the app then retries with span 0.5, then 1.0, for all batches, logs it and records the
-   span in `summary.json` (on the DRG demo the 186-nucleus sample needs 0.5).
-4. **PCA, pass 2.** The log-normalized `X` of each sample on the HVGs, then `scanpy.pp.pca`
-   (`N_PCS`, seeded) on the stacked matrix; written as `obsm["X_pca"]`.
+   span in `integration/summary.json` (the DRG demo needs 0.5).
+4. **PCA, pass 2.** The log-normalized `X` of each sample on the HVGs, stacked the same way, then
+   `scanpy.pp.pca` (`N_PCS`, seeded); written as `obsm["X_pca"]`.
 5. **Integration** (`METHOD`, above) → `obsm["X_integrated"]`. With one batch only, Harmony is
    skipped (`X_integrated` = `X_pca`), with a warning. scVI trains for `MAX_EPOCHS` (0 =
    scvi-tools' own rule, `min(400, 20000 / n_cells × 400)`) on the GPU when PyTorch sees one
-   (`torch.cuda.is_available()`, logged), else on the CPU.
+   (`torch.cuda.is_available()`, logged), else on the CPU. In the gpu image (`TORCH_FLAVOUR=cuda`)
+   a missing GPU is an error (exit 1, logged with torch's CUDA version) before anything is read,
+   so a gpu run never falls back to hours on CPU; with a GPU, the device, CUDA version and NVIDIA
+   driver are logged.
 6. **Clusters and UMAP.** Neighbours (`N_NEIGHBORS`) on `X_integrated`, Leiden (`RESOLUTION`),
    renamed `C01..` by decreasing size; UMAP of every nucleus → `obsm["X_umap"]`.
 7. **Metrics** on one seeded subsample of at most 20,000 nuclei, for `X_pca` and `X_integrated`:
@@ -71,11 +85,17 @@ neighbour graph and UMAP take longer), so it is the cpu default.
    (method, batch column, covariates, HVG count and loess span, PCs, neighbours, resolution, seed,
    device and epochs for scVI).
 
-Deviations from the single-cell best-practices guide (Heumos et al. 2023): none in the method; the
-guide's batch-aware HVG selection, unscaled PCA input for Harmony and count input for scVI are
-followed. The guide recommends benchmarking several methods with scib on your data; this app runs
-one per invocation and reports two of scib's metrics, not the full scib suite (scib-metrics needs
-JAX, which would double the image for two numbers computed here with scikit-learn).
+Deviations from the single-cell best-practices book (Heumos et al. 2023 and sc-best-practices.org):
+
+- **HVGs by seurat_v3, not deviance.** The book's feature-selection chapter recommends deviance on
+  raw counts (computed there with the R package scry). This app uses scanpy's
+  seurat_v3 flavour on the counts per batch, the batch-aware selection of the book's integration
+  chapter, because it is in the Python stack (no R in the image) and works per batch.
+- **One method per run.** The book suggests running several integration methods and comparing them
+  with the scIB metrics; this app runs one per invocation and reports two of scib's metrics (iLISI
+  and the cluster silhouette), not the full suite (scib-metrics needs JAX, which would double the
+  image for two numbers computed here with scikit-learn). Run it twice (`METHOD=harmony`,
+  `METHOD=scvi`) to compare.
 
 ## Ports
 
@@ -87,8 +107,10 @@ JAX, which would double the image for two numbers computed here with scikit-lear
 | `integration` | output | `integration/` metrics, HVGs, figures |
 
 The input uses `placement: subfolder`; without links every `.h5ad` under `INPUT_DIR` is a sample.
-Symlinks are followed, but below the platform's own links (the entries of `INPUT_DIR` and of
-`INPUT_DIR/cells/`) a link that leaves the input is skipped.
+Inputs are listed by the shared `processor/safe_inputs.py` (vendored unchanged from
+workflow-single-cell): the platform's links (the entries of `INPUT_DIR` and of a real
+`INPUT_DIR/cells/` folder) are followed one hop; an upstream entry that is itself a link elsewhere,
+or any deeper link that leaves the input, is skipped and logged.
 
 ## Parameters
 
@@ -103,7 +125,7 @@ Symlinks are followed, but below the platform's own links (the entries of `INPUT
 | `N_NEIGHBORS` | `15` | Neighbours in the graph (2–200). |
 | `RESOLUTION` | `1.0` | Leiden resolution (0–10]; higher = more clusters. |
 | `SEED` | `42` | Seed for PCA, Harmony, scVI, Leiden, UMAP and the metric subsample. |
-| `THREADS` | `0` | BLAS / numba / Harmony / PyTorch threads; 0 = the container's CPU quota (4 without one). |
+| `THREADS` | `0` | BLAS / numba / Harmony / PyTorch threads; 0 = the container's CPU quota (else the CPUs available). |
 
 Bad values exit with code 2 (as does an `INPUT_DIR` that is not a folder).
 
@@ -115,9 +137,8 @@ Bad values exit with code 2 (as does an `INPUT_DIR` that is not a folder).
 
 | File | Columns / content |
 |---|---|
-| `labels.csv` | `sample_id, obs_id, cluster` for every nucleus |
-| `cluster_summary.csv` | `sample_id, cluster, n_obs, fraction` (fraction of the sample) |
-| `summary.json` | samples, nuclei, clusters with `n_obs`, `n_samples` (samples present) and `largest_sample_fraction` (a cluster made of one sample is a residual batch effect or a sample-specific population), parameters |
+| `labels.csv` | `sample_id, obs_id, cluster` for every nucleus of every sample whose file was written |
+| `cluster_summary.csv` | `sample_id, cluster, n_obs, fraction` (fraction of the sample), the same samples |
 | `provenance.json` | app version, tool versions, parameters, method, citations (DOIs), inputs seen, timings, per-sample status, peak RSS |
 
 `integration/`:
@@ -128,7 +149,7 @@ Bad values exit with code 2 (as does an `INPUT_DIR` that is not a folder).
 | `hvg.csv` | `gene, rank, n_batches` (seurat_v3 rank across batches; batches in which the gene was highly variable) |
 | `umap_sample.png`, `umap_condition.png` (when `obs["condition"]` exists), `umap_cluster.png`, `umap_<BATCH_COLUMN>.png` (when it is not `sample_id`) | UMAP of all nuclei, drawn in a seeded random order so no sample hides another |
 | `scvi_history.csv` | `epoch, elbo_train` (scVI only) |
-| `summary.json` | the labels summary plus genes shared/dropped, HVGs and loess span, integration details (device, epochs, seconds per epoch, final ELBO), metrics, clustering timings, figures |
+| `summary.json` | samples, nuclei, clusters with `n_obs`, `n_samples` (samples present) and `largest_sample_fraction` (a cluster made of one sample is a residual batch effect or a sample-specific population), genes shared/dropped, HVGs and loess span, integration details (device, epochs, seconds per epoch, final ELBO), metrics, clustering timings, figures, parameters |
 | `provenance.json` | as above |
 
 ## Results on the demo data
@@ -300,6 +321,9 @@ volume, issue, pages, DOI, PMID), DataCite (preprints, the dataset) and the Penn
   analysis. *J Comput Appl Math* 1987;20:53-65. doi:10.1016/0377-0427(87)90125-7.
 - Heumos L, Schaar AC, Lance C, et al. Best practices for single-cell analysis across modalities.
   *Nat Rev Genet* 2023;24(8):550-572. doi:10.1038/s41576-023-00586-w. PMID 37002403.
+- Single-cell best practices (online book), https://www.sc-best-practices.org: chapters *Feature
+  selection* (Schaar A, Kim SH, Heumos L) and *Data integration* (Zappia L, Lücken M, Kim SH,
+  Heumos L); the site asks to be cited as Heumos et al. 2023 (above). Read on 2026-10-31.
 - Paszke A, Gross S, Massa F, et al. PyTorch: An Imperative Style, High-Performance Deep Learning
   Library. arXiv 2019. doi:10.48550/arXiv.1912.01703.
 - Pedregosa F, Varoquaux G, Gramfort A, et al. Scikit-learn: Machine Learning in Python. arXiv

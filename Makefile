@@ -2,6 +2,7 @@
 
 SERVICE_NAME ?= sc-integrate
 PYTHON ?= python3
+CFFCONVERT ?= pipx run cffconvert==2.0.0
 export DOCKER_DEFAULT_PLATFORM = linux/amd64
 
 .DEFAULT: help
@@ -17,6 +18,7 @@ help:
 	@echo "make clean     - remove data/output/"
 	@echo ""
 	@echo "PYTHON=$(PYTHON) (set PYTHON=.venv/bin/python after pip install -r requirements-dev.txt)"
+	@echo "CFFCONVERT=$(CFFCONVERT)"
 
 test:
 	MPLBACKEND=Agg $(PYTHON) -m pytest -q tests
@@ -38,8 +40,8 @@ image-gpu:
 	docker build --platform linux/amd64 --build-arg TORCH_FLAVOUR=cuda -t $(SERVICE_NAME):gpu .
 
 validate:
-	$(PYTHON) -c "import json, yaml, jsonschema; s = json.load(open('../workflow-single-cell/docs/app-manifest.v1.schema.json')); jsonschema.validate(yaml.safe_load(open('app.yml')), s); print('app.yml ok')"
-	$(dir $(PYTHON))cffconvert --validate && echo "CITATION.cff ok"
+	$(PYTHON) -c "import json, yaml, jsonschema; s = json.load(open('../workflow-single-cell/docs/app-manifest.v1.schema.json')); jsonschema.Draft202012Validator(s).validate(yaml.safe_load(open('app.yml'))); print('app.yml ok')"
+	$(CFFCONVERT) --validate && echo "CITATION.cff ok"
 
 clean:
 	rm -rf data/output

@@ -1,4 +1,12 @@
-FROM python:3.12.16-slim-bookworm@sha256:623674a14ef93d052bb9b0de4dbf5f28eb578a35263838941cc8aa43213c1487
+# python:3.12.16-slim-bookworm, pinned by its multi-arch index digest.
+ARG BASE=python:3.12.16-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337
+
+# docrep (a dependency of scvi-tools) is published as an sdist only: build its wheel here (pure Python),
+# so the final stage installs binary wheels only.
+FROM ${BASE} AS docrep
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels docrep==0.3.2
+
+FROM ${BASE}
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -7,16 +15,17 @@ ENV PIP_NO_CACHE_DIR=1 \
 
 WORKDIR /processor
 
-# PyTorch build: cpu or cuda. app.yml's variants set it (cpu variant: CPU-only torch from the PyTorch
-# CPU index, no NVIDIA libraries; gpu variant: the CUDA 13.2 build, which also runs on CPU). The
-# default is cpu for a builder that passes no build arguments.
+# PyTorch build: cpu or cuda. app.yml's variants set it (cpu variant: CPU-only torch from the PyTorch CPU
+# index, no NVIDIA libraries; gpu variant: the CUDA 12.6 build for the platform's driver 550). The default
+# is cpu for a builder that passes no build arguments.
 ARG TORCH_FLAVOUR=cpu
 
-# The complete pinned dependency set (no resolver: see requirements.txt; wheels, plus the pure-Python
-# sdist of docrep).
+# The complete pinned dependency set (no resolver: see requirements.txt), binary wheels only.
 COPY requirements.txt requirements-${TORCH_FLAVOUR}.txt /processor/
-RUN pip install --no-deps --prefer-binary \
+COPY --from=docrep /wheels /tmp/wheels
+RUN pip install --no-deps --only-binary=:all: --find-links /tmp/wheels \
         -r /processor/requirements.txt -r /processor/requirements-${TORCH_FLAVOUR}.txt \
+    && rm -rf /tmp/wheels \
     && find /usr/local/lib/python3.12/site-packages -name '*.pyc' -delete \
     && find /usr/local/lib/python3.12/site-packages -path '*/torch/*' -prune -o -type d -name tests -prune -exec rm -rf {} + \
     && rm -rf /usr/local/lib/python3.12/site-packages/torch/include
@@ -32,6 +41,7 @@ ENV PYTHONPATH="/processor" \
     MPLCONFIGDIR=/tmp/matplotlib \
     NUMBA_CACHE_DIR=/tmp/numba \
     XDG_CACHE_HOME=/tmp/cache \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     TORCH_FLAVOUR=${TORCH_FLAVOUR}
 
 # Build matplotlib's font cache and import the stack once, so a run needs no writes outside /tmp and

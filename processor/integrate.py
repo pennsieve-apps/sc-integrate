@@ -1,8 +1,9 @@
 """
 Joint integration of all samples.
 
-Pass 1 reads each sample's raw counts (layers["counts"], else X) and the obs columns needed,
-and stacks them on the genes present in every sample (CSR float32). Highly variable genes are
+A first look at every file reads its obs, genes and matrix sizes only. Pass 1 then fills each
+sample's raw counts (layers["counts"], else X) into one preallocated CSR float32 matrix on the
+genes present in every sample. Highly variable genes are
 chosen on these counts with scanpy's seurat_v3 flavour per batch. Pass 2 reads each sample's
 log-normalized X on those genes only, for the joint PCA. Then Harmony on the PCs or scVI on the
 HVG counts gives obsm["X_integrated"]; neighbours, Leiden and UMAP run on it. Batch mixing (iLISI)
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import anndata as ad
@@ -24,71 +26,110 @@ from anndata.io import read_elem
 
 log = logging.getLogger("sc-integrate")
 
-MAX_NNZ_PER_SAMPLE = 1_500_000_000   # non-zeros of one sample's matrix read into memory
 MAX_OBS_FOR_METRICS = 20_000         # the silhouette is O(n^2): seeded subsample
 LISI_K = 30                          # neighbours per observation for iLISI
 N_LATENT = 30                        # scVI latent dimensions
 N_LAYERS = 2                         # scVI encoder/decoder hidden layers
 OPTIONAL_COLUMNS = ("subject_id", "condition")   # kept when present: the auto batch key, the figure
 LOESS_SPANS = (0.3, 0.5, 1.0)        # seurat_v3 loess span: Seurat's 0.3, wider when a small batch makes it singular
+BYTES_PER_NNZ = 8                    # float32 value + int32 column index
 
 
-def _matrix_node(f: h5py.File):
-    """The raw counts of a file: layers/counts when present, else X."""
-    if "layers" in f and "counts" in f["layers"]:
-        return f["layers"]["counts"], "layers/counts"
-    return f["X"], "X"
+@dataclass
+class Meta:
+    """What a sample's file holds, read without its matrices."""
+    obs: pd.DataFrame        # sample_id, the batch/covariate columns asked for, OPTIONAL_COLUMNS present
+    genes: pd.Index
+    counts_from: str         # layers/counts or X
+    nnz_counts: int
+    nnz_x: int
+
+
+def _counts_node(f: h5py.File) -> str:
+    return "layers/counts" if "layers" in f and "counts" in f["layers"] else "X"
 
 
 def _nnz(node) -> int:
-    if isinstance(node, h5py.Group):
-        return int(node["data"].shape[0])
-    return int(np.prod(node.shape))
+    return int(node["data"].shape[0]) if isinstance(node, h5py.Group) else int(np.prod(node.shape))
 
 
-def _csr(m) -> sp.csr_matrix:
-    if not sp.issparse(m):
-        m = sp.csr_matrix(np.asarray(m))
-    return sp.csr_matrix(m, dtype=np.float32)
+def cgroup_memory_bytes() -> int | None:
+    """The container's memory limit (cgroup v2 memory.max, else v1), or None."""
+    for f in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            v = Path(f).read_text().strip()
+        except OSError:
+            continue
+        return int(v) if v.isdigit() and int(v) < (1 << 60) else None
+    return None
 
 
-def read_counts(path: Path, sample_id: str, columns: list[str]) -> tuple[ad.AnnData, str]:
-    """Counts (CSR float32), the obs columns asked for (plus sample_id, and subject_id and condition
-    when present) and the gene names."""
+def obs_columns(path: Path) -> set[str]:
+    """The obs column names of a file, without reading them."""
     with h5py.File(path, "r") as f:
-        node, where = _matrix_node(f)
-        if _nnz(node) > MAX_NNZ_PER_SAMPLE:
-            raise ValueError(f"{_nnz(node):,} non-zeros in {where}, more than {MAX_NNZ_PER_SAMPLE:,}")
-        X = _csr(read_elem(node))
+        return {str(c) for c in f["obs"].attrs.get("column-order", [])}
+
+
+def read_meta(path: Path, sample_id: str, columns: list[str]) -> Meta:
+    """obs (the columns asked for must exist and have no missing values), gene names and non-zero
+    counts of one sample; refuses a matrix larger than half the container's memory."""
+    with h5py.File(path, "r") as f:
         obs = read_elem(f["obs"])
         var = read_elem(f["var"])
+        where = _counts_node(f)
+        nnz_counts, nnz_x = _nnz(f[where]), _nnz(f["X"])
     if "sample_id" not in obs:
         obs["sample_id"] = sample_id
     missing = [c for c in columns if c not in obs]
     if missing:
         raise ValueError(f"obs has no column {', '.join(missing)}")
+    empty = [c for c in columns if obs[c].isna().any()]
+    if empty:
+        raise ValueError(f"obs column {', '.join(empty)} has missing values")
+    limit = cgroup_memory_bytes()
+    if limit and max(nnz_counts, nnz_x) * BYTES_PER_NNZ > limit // 2:
+        raise ValueError(f"{max(nnz_counts, nnz_x):,} non-zeros need more than half the {limit / 2**30:.1f} GiB memory limit")
     keep = list(dict.fromkeys(["sample_id", *columns, *(c for c in OPTIONAL_COLUMNS if c in obs)]))
-    obs = obs[keep].copy()
-    for c in keep:
-        obs[c] = obs[c].astype(str)
-    if X.data.size and not np.allclose(X.data[:10000], np.round(X.data[:10000])):
-        log.warning("%s: %s is not integer-valued; seurat_v3 and scVI expect raw counts", sample_id, where)
-    return ad.AnnData(X=X, obs=obs, var=pd.DataFrame(index=var.index.astype(str))), where
+    return Meta(obs[keep].copy(), pd.Index(var.index.astype(str)), where, nnz_counts, nnz_x)
 
 
-def stack(adatas: list[ad.AnnData]) -> tuple[ad.AnnData, int]:
-    """Concatenate on the genes present in every sample (the first sample's order)."""
-    shared = set(adatas[0].var_names)
-    for a in adatas[1:]:
-        shared &= set(a.var_names)
-    genes = [g for g in adatas[0].var_names if g in shared]
-    n_dropped = len(set().union(*(set(a.var_names) for a in adatas))) - len(genes)
-    blocks = [a.X[:, a.var_names.get_indexer(genes)] for a in adatas]
-    obs = pd.concat([a.obs for a in adatas])
-    for c in obs.columns:
-        obs[c] = obs[c].astype("category")
-    joint = ad.AnnData(X=sp.vstack(blocks, format="csr", dtype=np.float32), obs=obs, var=pd.DataFrame(index=genes))
-    return joint, n_dropped
+def shared_genes(metas: list[Meta]) -> tuple[list[str], int]:
+    """The genes present in every sample (the first sample's order) and how many others were seen."""
+    shared = set(metas[0].genes)
+    for m in metas[1:]:
+        shared &= set(m.genes)
+    genes = [g for g in metas[0].genes if g in shared]
+    return genes, len(set().union(*(set(m.genes) for m in metas))) - len(genes)
+
+
+def stack(paths: list[Path], metas: list[Meta], genes: list[str], counts: bool) -> sp.csr_matrix:
+    """One CSR float32 matrix (samples in order, `genes` as columns) of the counts or the log-normalized
+    X, filled into preallocated arrays one sample at a time, so the peak is the joint matrix plus one
+    sample rather than twice the joint matrix."""
+    bound = sum(m.nnz_counts if counts else m.nnz_x for m in metas)
+    data = np.empty(bound, dtype=np.float32)
+    indices = np.empty(bound, dtype=np.int32 if len(genes) < 2**31 else np.int64)
+    indptr = [np.zeros(1, dtype=np.int64)]
+    nnz = 0
+    for path, m in zip(paths, metas):
+        with h5py.File(path, "r") as f:
+            node = f[m.counts_from if counts else "X"]
+            X = read_elem(node)
+            if not sp.issparse(X):
+                X = sp.csr_matrix(np.asarray(X))
+            obs_names = read_elem(f["obs"]).index
+        if not obs_names.equals(m.obs.index):
+            raise ValueError(f"{path.name}: observations changed between reads")
+        X = sp.csr_matrix(X)[:, m.genes.get_indexer(genes)]
+        if counts and X.nnz and not np.allclose(X.data[:10000], np.round(X.data[:10000])):
+            log.warning("%s: %s is not integer-valued; seurat_v3 and scVI expect raw counts", path.stem, m.counts_from)
+        data[nnz:nnz + X.nnz] = X.data
+        indices[nnz:nnz + X.nnz] = X.indices
+        indptr.append(X.indptr[1:].astype(np.int64) + nnz)
+        nnz += X.nnz
+        del X
+    n_obs = sum(len(m.obs) for m in metas)
+    return sp.csr_matrix((data[:nnz], indices[:nnz], np.concatenate(indptr)), shape=(n_obs, len(genes)), copy=False)
 
 
 def highly_variable(joint: ad.AnnData, n_top: int, batch: str) -> tuple[pd.DataFrame, float]:
@@ -111,19 +152,6 @@ def highly_variable(joint: ad.AnnData, n_top: int, batch: str) -> tuple[pd.DataF
     table = pd.DataFrame({"gene": v.index, "rank": v["highly_variable_rank"], "n_batches": v["highly_variable_nbatches"],
                           "highly_variable": v["highly_variable"]})
     return table[table["highly_variable"]].sort_values("rank")[["gene", "rank", "n_batches"]], span
-
-
-def read_lognorm(path: Path, genes: list[str], obs_names: pd.Index) -> sp.csr_matrix:
-    """The log-normalized X of one sample on `genes`, checked against pass 1's observations."""
-    with h5py.File(path, "r") as f:
-        if _nnz(f["X"]) > MAX_NNZ_PER_SAMPLE:
-            raise ValueError(f"X has more than {MAX_NNZ_PER_SAMPLE:,} non-zeros")
-        X = _csr(read_elem(f["X"]))
-        var = read_elem(f["var"])
-        obs = read_elem(f["obs"])
-    if not obs.index.equals(obs_names):
-        raise ValueError("observations changed between the two reads")
-    return X[:, var.index.astype(str).get_indexer(genes)]
 
 
 def pca(X: sp.csr_matrix, n_pcs: int, seed: int) -> np.ndarray:
