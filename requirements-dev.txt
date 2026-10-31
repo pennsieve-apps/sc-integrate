@@ -1,0 +1,21 @@
+# Local tests and validation (macOS / Linux): pip install -r requirements-dev.txt
+# (pip resolves torch for the local platform; the image pins the linux/amd64 set in requirements.txt)
+scanpy==1.12.5
+anndata==0.13.4
+scvi-tools==1.5.2
+torch==2.15.0
+lightning==2.6.6
+harmonypy==2.1.0
+igraph==1.0.0
+scikit-misc==0.5.3
+umap-learn==0.5.12
+scikit-learn==1.9.1
+numpy==2.5.4
+scipy==1.18.1
+pandas==3.1.0
+h5py==3.16.0
+matplotlib==3.11.2
+pytest==9.2.0
+jsonschema==3.2.0
+PyYAML==6.0.3
+cffconvert==2.0.0

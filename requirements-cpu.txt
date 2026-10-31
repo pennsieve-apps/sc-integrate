@@ -1,0 +1,4 @@
+# PyTorch, CPU-only build, no NVIDIA libraries (cpu variant: docker build --build-arg TORCH_FLAVOUR=cpu).
+# The same torch version as requirements-cuda.txt.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0+cpu

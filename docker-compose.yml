@@ -1,0 +1,18 @@
+services:
+  processor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TORCH_FLAVOUR: cpu
+    platform: linux/amd64
+    mem_limit: 3g
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    env_file:
+      - dev.env
+    volumes:
+      - ./data/fixture/linked:/data/input:ro
+      - ./data/output:/data/output

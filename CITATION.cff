@@ -1,0 +1,531 @@
+cff-version: 1.2.0
+message: If you use this app, please cite it and the works it builds on, listed under references.
+type: software
+title: Single-cell Integration
+abstract: 'Joint integration and clustering of single-cell and single-nucleus RNA-seq samples: highly variable genes
+  on the counts across batches (Seurat v3 method), a joint PCA, Harmony or scVI integration, Leiden clusters and
+  a UMAP on the integrated embedding, with scib batch and cluster silhouette metrics before and after integration.'
+authors:
+- name: Pennsieve (University of Pennsylvania)
+repository-code: https://github.com/pennsieve-apps/sc-integrate
+license: Apache-2.0
+version: 0.1.0
+keywords:
+- single-cell
+- single-nucleus
+- transcriptomics
+- genomics
+- integration
+- batch-correction
+- clustering
+- harmony
+- scvi
+- neuroscience
+- pain
+- musculoskeletal
+references:
+- type: article
+  title: 'SCANPY: large-scale single-cell gene expression data analysis'
+  authors:
+  - family-names: Wolf
+    given-names: F Alexander
+  - family-names: Angerer
+    given-names: Philipp
+  - family-names: Theis
+    given-names: Fabian J
+  year: 2018
+  journal: Genome Biology
+  volume: 19
+  issue: '1'
+  start: '15'
+  doi: 10.1186/s13059-017-1382-0
+  identifiers:
+  - type: other
+    value: pmid:29409532
+    description: PubMed ID
+- type: article
+  title: 'anndata: Access and store annotated data matrices'
+  authors:
+  - family-names: Virshup
+    given-names: Isaac
+  - family-names: Rybakov
+    given-names: Sergei
+  - family-names: Theis
+    given-names: Fabian J.
+  - family-names: Angerer
+    given-names: Philipp
+  - family-names: Wolf
+    given-names: F. Alexander
+  year: 2024
+  journal: Journal of Open Source Software
+  volume: 9
+  issue: '101'
+  start: '4371'
+  doi: 10.21105/joss.04371
+- type: article
+  title: Comprehensive Integration of Single-Cell Data
+  authors:
+  - family-names: Stuart
+    given-names: Tim
+  - family-names: Butler
+    given-names: Andrew
+  - family-names: Hoffman
+    given-names: Paul
+  - family-names: Hafemeister
+    given-names: Christoph
+  - family-names: Papalexi
+    given-names: Efthymia
+  - family-names: Mauck
+    given-names: William M
+  - family-names: Hao
+    given-names: Yuhan
+  - family-names: Stoeckius
+    given-names: Marlon
+  - family-names: Smibert
+    given-names: Peter
+  - family-names: Satija
+    given-names: Rahul
+  year: 2019
+  journal: Cell
+  volume: 177
+  issue: '7'
+  start: '1888'
+  end: 1902.e21
+  doi: 10.1016/j.cell.2019.05.031
+  identifiers:
+  - type: other
+    value: pmid:31178118
+    description: PubMed ID
+- type: article
+  title: Fast, sensitive and accurate integration of single-cell data with Harmony
+  authors:
+  - family-names: Korsunsky
+    given-names: Ilya
+  - family-names: Millard
+    given-names: Nghia
+  - family-names: Fan
+    given-names: Jean
+  - family-names: Slowikowski
+    given-names: Kamil
+  - family-names: Zhang
+    given-names: Fan
+  - family-names: Wei
+    given-names: Kevin
+  - family-names: Baglaenko
+    given-names: Yuriy
+  - family-names: Brenner
+    given-names: Michael
+  - family-names: Loh
+    given-names: Po-Ru
+  - family-names: Raychaudhuri
+    given-names: Soumya
+  year: 2019
+  journal: Nature Methods
+  volume: 16
+  issue: '12'
+  start: '1289'
+  end: '1296'
+  doi: 10.1038/s41592-019-0619-0
+  identifiers:
+  - type: other
+    value: pmid:31740819
+    description: PubMed ID
+- type: article
+  title: Deep generative modeling for single-cell transcriptomics
+  authors:
+  - family-names: Lopez
+    given-names: Romain
+  - family-names: Regier
+    given-names: Jeffrey
+  - family-names: Cole
+    given-names: Michael B
+  - family-names: Jordan
+    given-names: Michael I
+  - family-names: Yosef
+    given-names: Nir
+  year: 2018
+  journal: Nature Methods
+  volume: 15
+  issue: '12'
+  start: '1053'
+  end: '1058'
+  doi: 10.1038/s41592-018-0229-2
+  identifiers:
+  - type: other
+    value: pmid:30504886
+    description: PubMed ID
+- type: article
+  title: A Python library for probabilistic analysis of single-cell omics data
+  authors:
+  - family-names: Gayoso
+    given-names: Adam
+  - family-names: Lopez
+    given-names: Romain
+  - family-names: Xing
+    given-names: Galen
+  - family-names: Boyeau
+    given-names: Pierre
+  - family-names: Valiollah Pour Amiri
+    given-names: Valeh
+  - family-names: Hong
+    given-names: Justin
+  - family-names: Wu
+    given-names: Katherine
+  - family-names: Jayasuriya
+    given-names: Michael
+  - family-names: Mehlman
+    given-names: Edouard
+  - family-names: Langevin
+    given-names: Maxime
+  - family-names: Liu
+    given-names: Yining
+  - family-names: Samaran
+    given-names: Jules
+  - family-names: Misrachi
+    given-names: Gabriel
+  - family-names: Nazaret
+    given-names: Achille
+  - family-names: Clivio
+    given-names: Oscar
+  - family-names: Xu
+    given-names: Chenling
+  - family-names: Ashuach
+    given-names: Tal
+  - family-names: Gabitto
+    given-names: Mariano
+  - family-names: Lotfollahi
+    given-names: Mohammad
+  - family-names: Svensson
+    given-names: Valentine
+  - family-names: da Veiga Beltrame
+    given-names: Eduardo
+  - family-names: Kleshchevnikov
+    given-names: Vitalii
+  - family-names: Talavera-López
+    given-names: Carlos
+  - family-names: Pachter
+    given-names: Lior
+  - family-names: Theis
+    given-names: Fabian J
+  - family-names: Streets
+    given-names: Aaron
+  - family-names: Jordan
+    given-names: Michael I
+  - family-names: Regier
+    given-names: Jeffrey
+  - family-names: Yosef
+    given-names: Nir
+  year: 2022
+  journal: Nature Biotechnology
+  volume: 40
+  issue: '2'
+  start: '163'
+  end: '166'
+  doi: 10.1038/s41587-021-01206-w
+  identifiers:
+  - type: other
+    value: pmid:35132262
+    description: PubMed ID
+- type: article
+  title: 'From Louvain to Leiden: guaranteeing well-connected communities'
+  authors:
+  - family-names: Traag
+    given-names: V A
+  - family-names: Waltman
+    given-names: L
+  - family-names: van Eck
+    given-names: N J
+  year: 2019
+  journal: Scientific Reports
+  volume: 9
+  issue: '1'
+  start: '5233'
+  doi: 10.1038/s41598-019-41695-z
+  identifiers:
+  - type: other
+    value: pmid:30914743
+    description: PubMed ID
+- type: article
+  title: 'UMAP: Uniform Manifold Approximation and Projection'
+  authors:
+  - family-names: McInnes
+    given-names: Leland
+  - family-names: Healy
+    given-names: John
+  - family-names: Saul
+    given-names: Nathaniel
+  - family-names: Großberger
+    given-names: Lukas
+  year: 2018
+  journal: Journal of Open Source Software
+  volume: 3
+  issue: '29'
+  start: '861'
+  doi: 10.21105/joss.00861
+- type: article
+  title: Benchmarking atlas-level data integration in single-cell genomics
+  authors:
+  - family-names: Luecken
+    given-names: Malte D
+  - family-names: Büttner
+    given-names: M
+  - family-names: Chaichoompu
+    given-names: K
+  - family-names: Danese
+    given-names: A
+  - family-names: Interlandi
+    given-names: M
+  - family-names: Mueller
+    given-names: M F
+  - family-names: Strobl
+    given-names: D C
+  - family-names: Zappia
+    given-names: L
+  - family-names: Dugas
+    given-names: M
+  - family-names: Colomé-Tatché
+    given-names: M
+  - family-names: Theis
+    given-names: Fabian J
+  year: 2022
+  journal: Nature Methods
+  volume: 19
+  issue: '1'
+  start: '41'
+  end: '50'
+  doi: 10.1038/s41592-021-01336-8
+  identifiers:
+  - type: other
+    value: pmid:34949812
+    description: PubMed ID
+- type: article
+  title: 'Silhouettes: A graphical aid to the interpretation and validation of cluster analysis'
+  authors:
+  - family-names: Rousseeuw
+    given-names: Peter J.
+  year: 1987
+  journal: Journal of Computational and Applied Mathematics
+  volume: 20
+  start: '53'
+  end: '65'
+  doi: 10.1016/0377-0427(87)90125-7
+- type: article
+  title: Best practices for single-cell analysis across modalities
+  authors:
+  - family-names: Heumos
+    given-names: Lukas
+  - family-names: Schaar
+    given-names: Anna C
+  - family-names: Lance
+    given-names: Christopher
+  - family-names: Litinetskaya
+    given-names: Anastasia
+  - family-names: Drost
+    given-names: Felix
+  - family-names: Zappia
+    given-names: Luke
+  - family-names: Lücken
+    given-names: Malte D
+  - family-names: Strobl
+    given-names: Daniel C
+  - family-names: Henao
+    given-names: Juan
+  - family-names: Curion
+    given-names: Fabiola
+  - name: Single-cell Best Practices Consortium
+  - family-names: Schiller
+    given-names: Herbert B
+  - family-names: Theis
+    given-names: Fabian J
+  year: 2023
+  journal: Nature Reviews Genetics
+  volume: 24
+  issue: '8'
+  start: '550'
+  end: '572'
+  doi: 10.1038/s41576-023-00586-w
+  identifiers:
+  - type: other
+    value: pmid:37002403
+    description: PubMed ID
+- type: generic
+  title: 'PyTorch: An Imperative Style, High-Performance Deep Learning Library'
+  authors:
+  - family-names: Paszke
+    given-names: Adam
+  - family-names: Gross
+    given-names: Sam
+  - family-names: Massa
+    given-names: Francisco
+  - family-names: Lerer
+    given-names: Adam
+  - family-names: Bradbury
+    given-names: James
+  - family-names: Chanan
+    given-names: Gregory
+  - family-names: Killeen
+    given-names: Trevor
+  - family-names: Lin
+    given-names: Zeming
+  - family-names: Gimelshein
+    given-names: Natalia
+  - family-names: Antiga
+    given-names: Luca
+  - family-names: Desmaison
+    given-names: Alban
+  - family-names: Köpf
+    given-names: Andreas
+  - family-names: Yang
+    given-names: Edward
+  - family-names: DeVito
+    given-names: Zach
+  - family-names: Raison
+    given-names: Martin
+  - family-names: Tejani
+    given-names: Alykhan
+  - family-names: Chilamkurthy
+    given-names: Sasank
+  - family-names: Steiner
+    given-names: Benoit
+  - family-names: Fang
+    given-names: Lu
+  - family-names: Bai
+    given-names: Junjie
+  - family-names: Chintala
+    given-names: Soumith
+  year: 2019
+  publisher:
+    name: arXiv
+  doi: 10.48550/arXiv.1912.01703
+- type: generic
+  title: 'Scikit-learn: Machine Learning in Python'
+  authors:
+  - family-names: Pedregosa
+    given-names: Fabian
+  - family-names: Varoquaux
+    given-names: Gaël
+  - family-names: Gramfort
+    given-names: Alexandre
+  - family-names: Michel
+    given-names: Vincent
+  - family-names: Thirion
+    given-names: Bertrand
+  - family-names: Grisel
+    given-names: Olivier
+  - family-names: Blondel
+    given-names: Mathieu
+  - family-names: Müller
+    given-names: Andreas
+  - family-names: Nothman
+    given-names: Joel
+  - family-names: Louppe
+    given-names: Gilles
+  - family-names: Prettenhofer
+    given-names: Peter
+  - family-names: Weiss
+    given-names: Ron
+  - family-names: Dubourg
+    given-names: Vincent
+  - family-names: Vanderplas
+    given-names: Jake
+  - family-names: Passos
+    given-names: Alexandre
+  - family-names: Cournapeau
+    given-names: David
+  - family-names: Brucher
+    given-names: Matthieu
+  - family-names: Perrot
+    given-names: Matthieu
+  - family-names: Duchesnay
+    given-names: Édouard
+  year: 2012
+  publisher:
+    name: arXiv
+  doi: 10.48550/arXiv.1201.0490
+- type: software
+  title: python-igraph
+  authors:
+  - name: The igraph core team
+  license: GPL-2.0-or-later
+  version: 1.0.0
+  repository-code: https://github.com/igraph/python-igraph
+  notes: Leiden implementation used by scanpy.tl.leiden(flavor='igraph').
+- type: software
+  title: harmonypy
+  authors:
+  - family-names: Slowikowski
+    given-names: Kamil
+  license: GPL-3.0-or-later
+  version: 2.1.0
+  repository-code: https://github.com/slowkow/harmonypy
+  notes: Python port of Harmony.
+- type: data
+  title: Single nucleus sequencing of human C2 dorsal root ganglia tissue from fusion surgeries
+  authors:
+  - family-names: Arendt-Tranholm
+    given-names: Asta
+    orcid: https://orcid.org/0000-0002-6997-0959
+  - family-names: Sankaranarayanan
+    given-names: Ishwarya
+    orcid: https://orcid.org/0000-0002-6765-0281
+  - family-names: Price
+    given-names: Theodore J
+    orcid: https://orcid.org/0000-0002-6971-6221
+  year: 2025
+  version: '1'
+  publisher:
+    name: SPARC Portal (Pennsieve Discover dataset 475)
+  doi: 10.26275/cxuf-ftav
+  license: CC-BY-4.0
+  url: https://discover.pennsieve.io/datasets/475/version/1
+  notes: Demo data.
+- type: article
+  title: 'Transcriptome of the human C2 dorsal root ganglia in C1–2 arthrodesis surgery: insight for neck pain'
+  authors:
+  - family-names: Arendt-Tranholm
+    given-names: Asta
+  - family-names: Sankaranarayanan
+    given-names: Ishwarya
+  - family-names: Payne
+    given-names: Cathryn
+  - family-names: Mancilla Moreno
+    given-names: Marisol
+  - family-names: Mazhar
+    given-names: Khadijah
+  - family-names: Yap
+    given-names: Natalie
+  - family-names: Chiu
+    given-names: Abby P
+  - family-names: Barry
+    given-names: Allison
+  - family-names: Patel
+    given-names: Pooja J
+  - family-names: Inturi
+    given-names: Nikhil N
+  - family-names: Tavares-Ferreira
+    given-names: Diana
+  - family-names: Amin
+    given-names: Anubhav
+  - family-names: Karandikar
+    given-names: Mahesh
+  - family-names: Jarvik
+    given-names: Jeffrey G
+  - family-names: Turner
+    given-names: Judith A
+  - family-names: Hofstetter
+    given-names: Christoph P
+  - family-names: Curatolo
+    given-names: Michele
+  - family-names: Price
+    given-names: Theodore J
+  year: 2026
+  journal: Brain
+  volume: 149
+  issue: '4'
+  start: '1349'
+  end: '1364'
+  doi: 10.1093/brain/awaf370
+  identifiers:
+  - type: other
+    value: pmid:41032656
+    description: PubMed ID
