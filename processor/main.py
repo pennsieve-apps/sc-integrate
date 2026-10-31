@@ -41,7 +41,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULTS = {
     "METHOD": "harmony",
-    "BATCH_COLUMN": "sample_id",
+    "BATCH_COLUMN": "auto",
     "COVARIATES": "",
     "N_HVG": "3000",
     "N_PCS": "50",
@@ -101,7 +101,7 @@ def read_parameters(env=os.environ) -> dict:
         raise ParameterError(f"METHOD must be one of {', '.join(METHODS)}, got {raw['METHOD']!r}")
     p["BATCH_COLUMN"] = raw["BATCH_COLUMN"]
     p["COVARIATES"] = [c.strip() for c in raw["COVARIATES"].split(",") if c.strip()]
-    for c in [p["BATCH_COLUMN"], *p["COVARIATES"]]:
+    for c in [*([p["BATCH_COLUMN"]] if p["BATCH_COLUMN"] != "auto" else []), *p["COVARIATES"]]:
         if not COLUMN.match(c):
             raise ParameterError(f"BATCH_COLUMN / COVARIATES must be obs column names ([A-Za-z_][A-Za-z0-9_]*), got {c!r}")
     if p["BATCH_COLUMN"] in p["COVARIATES"] or len(set(p["COVARIATES"])) != len(p["COVARIATES"]):
@@ -213,6 +213,7 @@ def main() -> int:
         log.error("no <sample_id>.h5ad found under %s", input_dir)
         return 1
     batch, covariates = params["BATCH_COLUMN"], params["COVARIATES"]
+    required = [*([batch] if batch != "auto" else []), *covariates]
     timings: dict = {}
 
     def rel(p: Path) -> str:
@@ -225,7 +226,7 @@ def main() -> int:
         ts = time.monotonic()
         status = {"sample_id": s.sample_id, "file": rel(s.path)}
         try:
-            a, where = I.read_counts(s.path, s.sample_id, [batch, *covariates])
+            a, where = I.read_counts(s.path, s.sample_id, required)
             parts.append(a)
             used.append(s)
             status.update(status="ok", n_obs=int(a.n_obs), n_genes=int(a.n_vars), counts_from=where)
@@ -238,6 +239,15 @@ def main() -> int:
     if not parts:
         log.error("every sample failed")
         return 1
+    if batch == "auto":
+        # the donor when every sample says who it came from (one donor's samples share donor effects
+        # and may differ in tissue or side, which integration should keep), else the sample
+        batch = "subject_id" if all("subject_id" in a.obs and (a.obs["subject_id"] != "nan").all() for a in parts) \
+            else "sample_id"
+        if batch in covariates:
+            log.error("COVARIATES must not repeat the batch column %s", batch)
+            return 2
+        log.info("BATCH_COLUMN=auto: batches are %s", batch)
     joint, n_dropped = I.stack(parts)
     sizes = [a.n_obs for a in parts]
     n_shared = int(joint.n_vars)
@@ -395,8 +405,8 @@ def main() -> int:
             "metrics": f"iLISI (inverse Simpson index of batches among {I.LISI_K} nearest neighbours, scib scaling) and "
                        f"cluster ASW (sklearn silhouette, rescaled) on at most {I.MAX_OBS_FOR_METRICS} seeded observations",
         },
-        "citations": [{"name": k, **CITATIONS[k]} for k in cites],
-        "inputs": {"cells": [rel(p) for p in found.seen], "skipped": found.skipped},
+        "citations": [{k: v for k, v in CITATIONS[c].items() if v} for c in cites],
+        "inputs": [rel(p) for p in found.seen], "inputs_skipped": found.skipped,
         "started": started.isoformat(), "finished": datetime.now(timezone.utc).isoformat(),
         "timings_seconds": {**timings, "total": round(time.monotonic() - t0, 1)},
         "peak_rss_mb": peak_rss_mb(), "cgroup_peak_mb": cgroup_peak_mb(),

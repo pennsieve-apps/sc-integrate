@@ -29,6 +29,7 @@ MAX_OBS_FOR_METRICS = 20_000         # the silhouette is O(n^2): seeded subsampl
 LISI_K = 30                          # neighbours per observation for iLISI
 N_LATENT = 30                        # scVI latent dimensions
 N_LAYERS = 2                         # scVI encoder/decoder hidden layers
+OPTIONAL_COLUMNS = ("subject_id", "condition")   # kept when present: the auto batch key, the figure
 LOESS_SPANS = (0.3, 0.5, 1.0)        # seurat_v3 loess span: Seurat's 0.3, wider when a small batch makes it singular
 
 
@@ -52,7 +53,8 @@ def _csr(m) -> sp.csr_matrix:
 
 
 def read_counts(path: Path, sample_id: str, columns: list[str]) -> tuple[ad.AnnData, str]:
-    """Counts (CSR float32), the obs columns asked for (plus sample_id) and the gene names."""
+    """Counts (CSR float32), the obs columns asked for (plus sample_id, and subject_id and condition
+    when present) and the gene names."""
     with h5py.File(path, "r") as f:
         node, where = _matrix_node(f)
         if _nnz(node) > MAX_NNZ_PER_SAMPLE:
@@ -65,7 +67,7 @@ def read_counts(path: Path, sample_id: str, columns: list[str]) -> tuple[ad.AnnD
     missing = [c for c in columns if c not in obs]
     if missing:
         raise ValueError(f"obs has no column {', '.join(missing)}")
-    keep = list(dict.fromkeys(["sample_id", *columns, *(c for c in ("condition",) if c in obs)]))
+    keep = list(dict.fromkeys(["sample_id", *columns, *(c for c in OPTIONAL_COLUMNS if c in obs)]))
     obs = obs[keep].copy()
     for c in keep:
         obs[c] = obs[c].astype(str)

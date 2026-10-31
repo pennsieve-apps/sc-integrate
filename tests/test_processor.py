@@ -64,6 +64,7 @@ def test_harmony(fixture_root, tmp_path, monkeypatch, layout):
     assert a.obsm["X_umap"].shape == (400, 2)
     assert all(c.startswith("C") for c in a.obs["cluster"].cat.categories)
     assert a.uns["pennsieve"]["integration"]["method"] == "harmony"
+    assert a.uns["pennsieve"]["integration"]["batch_column"] == "subject_id"   # BATCH_COLUMN=auto
     assert a.uns["pennsieve"]["prep_version"] == "fixture"   # earlier keys kept
 
     labels = rows(out / "labels" / "labels.csv")
@@ -79,8 +80,12 @@ def test_harmony(fixture_root, tmp_path, monkeypatch, layout):
 
     prov = json.loads((out / "integration" / "provenance.json").read_text())
     assert prov["app"] == "sc-integrate" and prov["version"] == "0.1.0" and prov["n_ok"] == 3
-    assert {"Harmony", "scib", "Leiden"} <= {c["name"] for c in prov["citations"]}
-    assert all(c["doi"] for c in prov["citations"])
+    assert {"app", "version", "tools", "parameters", "inputs", "started", "finished", "samples", "peak_rss_mb",
+            "citations"} <= set(prov)
+    assert sorted(Path(p).name for p in prov["inputs"]) == ["s1.h5ad", "s2.h5ad", "s3.h5ad"]
+    dois = {c["doi"] for c in prov["citations"]}
+    assert {"10.1038/s41592-019-0619-0", "10.1038/s41592-021-01336-8", "10.1038/s41598-019-41695-z"} <= dois
+    assert all(set(c) <= {"doi", "pmid", "text"} and c["text"] for c in prov["citations"])
 
 
 def test_scvi(fixture_root, tmp_path, monkeypatch):
@@ -88,6 +93,7 @@ def test_scvi(fixture_root, tmp_path, monkeypatch):
 
     out = tmp_path / "out"
     assert run(fixture_root["linked"], out, monkeypatch, METHOD="scvi", MAX_EPOCHS=100, COVARIATES="condition",
+               BATCH_COLUMN="sample_id",
                RESOLUTION=0.3) == 0
     a = ad.read_h5ad(out / "cells" / "s1.h5ad")
     assert a.obsm["X_integrated"].shape == (400, 30)
@@ -100,7 +106,23 @@ def test_scvi(fixture_root, tmp_path, monkeypatch):
     m = summary["metrics"]
     assert m["integrated"]["ilisi_scaled"] > m["unintegrated"]["ilisi_scaled"] + 0.3
     prov = json.loads((out / "integration" / "provenance.json").read_text())
-    assert {"scVI", "scvi-tools"} <= {c["name"] for c in prov["citations"]} and "Harmony" not in {c["name"] for c in prov["citations"]}
+    dois = {c["doi"] for c in prov["citations"]}
+    assert {"10.1038/s41592-018-0229-2", "10.1038/s41587-021-01206-w"} <= dois and "10.1038/s41592-019-0619-0" not in dois
+    assert rec["batch_column"] == "sample_id"
+
+
+def test_auto_batch_without_subject_id(fixture_root, tmp_path, monkeypatch):
+    import anndata as ad
+
+    inp = tmp_path / "in" / "cells"
+    inp.mkdir(parents=True)
+    for p in sorted((fixture_root["linked"] / "cells").glob("*.h5ad")):
+        a = ad.read_h5ad(p)
+        del a.obs["subject_id"]
+        a.write_h5ad(inp / p.name)
+    out = tmp_path / "out"
+    assert run(inp.parent, out, monkeypatch) == 0
+    assert json.loads((out / "integration" / "summary.json").read_text())["integration"]["batch_column"] == "sample_id"
 
 
 def test_bad_sample_is_skipped(fixture_root, tmp_path, monkeypatch):
@@ -114,7 +136,7 @@ def test_bad_sample_is_skipped(fixture_root, tmp_path, monkeypatch):
     assert run(inp.parent, out, monkeypatch) == 0
     prov = json.loads((out / "labels" / "provenance.json").read_text())
     assert prov["n_ok"] == 3 and prov["n_failed"] == 1
-    assert "cells/bad name.h5ad" in prov["inputs"]["skipped"]
+    assert "cells/bad name.h5ad" in prov["inputs_skipped"]
     assert not (out / "cells" / "broken.h5ad").exists()
 
 
@@ -130,7 +152,7 @@ def test_links_outside_input_are_skipped(fixture_root, tmp_path, monkeypatch):
     out = tmp_path / "out"
     assert run(inp, out, monkeypatch) == 0
     prov = json.loads((out / "labels" / "provenance.json").read_text())
-    assert prov["inputs"]["skipped"] == {"cells/nested/x9.h5ad": "links outside INPUT_DIR"}
+    assert prov["inputs_skipped"] == {"cells/nested/x9.h5ad": "links outside INPUT_DIR"}
 
 
 def test_missing_batch_column_fails(fixture_root, tmp_path, monkeypatch):
@@ -143,7 +165,7 @@ def test_no_input(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("name,value", [("METHOD", "combat"), ("RESOLUTION", "0"), ("N_PCS", "1"), ("N_HVG", "10"),
-                                        ("BATCH_COLUMN", "a;b"), ("COVARIATES", "sample_id"), ("MAX_EPOCHS", "-1"),
+                                        ("BATCH_COLUMN", "a;b"), ("COVARIATES", "subject_id"), ("MAX_EPOCHS", "-1"),
                                         ("SEED", "x")])
 def test_bad_parameters(fixture_root, tmp_path, monkeypatch, name, value):
     assert run(fixture_root["linked"], tmp_path / "out", monkeypatch, **{name: value}) == 2

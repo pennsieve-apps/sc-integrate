@@ -33,12 +33,14 @@ Why these two methods: the scib benchmark found that HVG selection improves inte
 scaling pushes methods towards batch removal at the cost of biology (so the PCA here is unscaled),
 and that scANVI, Scanorama, scVI and scGen perform well, particularly on complex integration tasks
 (Luecken et al. 2022). scVI needs no labels and scales to atlases on a GPU, so it is the gpu
-variant's default. Harmony needs no GPU and integrates 100,000 nuclei in seconds on CPU, so it is the
-cpu default.
+variant's default. Harmony needs no GPU and corrects 92,000 nuclei in about a second on CPU (the
+neighbour graph and UMAP take longer), so it is the cpu default.
 
 ## Method
 
 1. **Inputs.** Every `<sample_id>.h5ad` in `cells/` (or anywhere under the input without links).
+   The batches are `BATCH_COLUMN`; `auto` takes `subject_id`, the donor key sc-prep writes on every
+   cell, when every sample has it, else `sample_id` (logged and recorded).
    A file that cannot be read, lacks `BATCH_COLUMN` or a covariate in `obs`, or has more than 1.5
    billion non-zeros is logged and skipped; the run fails (exit 1) only when no sample is usable.
 2. **Counts, pass 1.** `layers["counts"]` (else `X`) of each sample, one at a time, stacked as CSR
@@ -93,7 +95,7 @@ Symlinks are followed, but below the platform's own links (the entries of `INPUT
 | Name | Default | What it does |
 |---|---|---|
 | `METHOD` | `harmony` (gpu variant: `scvi`) | `harmony` (PCs) or `scvi` (counts). |
-| `BATCH_COLUMN` | `sample_id` | `obs` column of the batches (also the HVG batches). Use `donor`/`subject_id` when one donor gave several samples whose differences you want to keep. |
+| `BATCH_COLUMN` | `auto` | `obs` column of the batches (also the HVG batches). `auto`: `subject_id` (the donor) when every sample has it, else `sample_id`. By donor, one donor's samples (left/right ganglia, several joint tissues) keep their differences; `sample_id` treats every library as a batch. |
 | `COVARIATES` | empty | Comma-separated extra categorical `obs` columns to remove (e.g. `chemistry`). Never the condition you want to compare. |
 | `N_HVG` | `3000` | Highly variable genes (50–20,000; capped by the shared genes). |
 | `N_PCS` | `50` | PCA components (2–200). |
@@ -131,11 +133,65 @@ Bad values exit with code 2 (as does an `INPUT_DIR` that is not a folder).
 
 ## Results on the demo data
 
-RESULTS_PLACEHOLDER
+sc-qc output of Discover dataset 475 (C2 DRG, 10x Flex, 12 donors, one sample each; sc-prep
+capped samples at 3,000 nuclei): `data/work/drg-c2/integrate/` (the input of sc-annotate), cpu
+image, defaults (Harmony, `BATCH_COLUMN=auto` → `subject_id`, 3,000 HVGs, 50 PCs, resolution 1.0).
+
+- 18,439 nuclei × 17,681 genes in every sample (819 genes not in every sample dropped: eight
+  samples have 18,082 features, four have 18,099). The loess fit of the HVG step needs the wider
+  span (0.5); the smallest sample has 165 nuclei.
+- **Mixing** (median iLISI, effective number of donors among a nucleus's 30 neighbours): 1.42 on
+  the PCA, **2.81** after Harmony (scaled 0.038 → 0.165). Cluster ASW 0.545 → 0.550.
+- **15 clusters**, 10–12 donors each except C02 and C11 (7 donors). By the mean log-normalized
+  expression of canonical genes: neuronal clusters C04, C07, C10, C12, C13 (SNAP25, RBFOX3);
+  FABP7/APOE-high clusters C03, C05, C08 (satellite glia); DCN-high C02, C06 (fibroblasts);
+  PECAM1/VWF C09 (endothelium); CD163 C11 (macrophages); MPZ/PRX C14 (myelinating Schwann cells);
+  RGS5/ACTA2 C15 (pericytes / smooth muscle); C01 is low in every marker. sc-annotate names them.
+- **Two groups of donors stay apart.** The four 18,099-feature samples (CC0032, CC0037, CC0048,
+  CC0050) put 0–8 % of their nuclei in the SNAP25-high clusters, the other eight 44–91 %, and only
+  45 % of the four samples' nuclei fall in clusters with at least 20 % nuclei from the other eight
+  (Harmony; scVI 31–34 %). Whether this is tissue content (how much ganglion vs root or capsule
+  was sampled) or a processing difference (the feature counts suggest a different probe set or
+  pipeline version) cannot be told from these data; check the markers (sc-markers) and the paper
+  before comparing conditions across the two groups, and consider a `COVARIATES` column for the
+  processing batch if the authors' metadata gives one.
+- **scVI** on the same data (cpu image, 20 epochs only, to time it): iLISI 1.42 → 2.05, 19 clusters.
+  With scvi-tools' default epochs (400 at this size) on a stand-in for sc-qc of the same samples
+  (20,204 nuclei, light filtering; native arm64): iLISI 1.47 → **3.00** (Harmony on the same
+  stand-in: 2.83), cluster ASW 0.547, 21 clusters: slightly more mixing, not a different picture.
+
+On the synthetic fixture (5 planted types, 3 samples with a planted gene-wise batch effect), both
+methods recover the planted types exactly (ARI 1.0 at resolution 0.3) and raise the scaled iLISI
+from < 0.2 to > 0.4.
 
 ## Runtime
 
-RUNTIME_PLACEHOLDER
+`computeTypes: [standard]` (cpu variant), 4 vCPU / 16 GiB, 8 h timeout; gpu variant:
+`computeTypes: [gpu]`, 14 GiB. Measured in the linux/amd64 images under emulation on an M-series
+Mac (Docker, 4 CPUs; native x86 is several times faster):
+
+| Input | Method | Wall time | Peak RSS (cgroup peak) |
+|---|---|---|---|
+| DRG demo, 12 samples, 18,439 nuclei | Harmony | 122 s (HVG 12 s, PCA 3 s, Harmony 0.4 s, neighbours 82 s, UMAP 8 s, write 7 s) | 1.79 GB (2.00 GB) |
+| same | scVI, 20 epochs | 192 s (3.5 s per epoch) | 2.67 GB (2.89 GB) |
+| DRG demo ×5 (binomially thinned copies, 60 samples), 92,195 nuclei | Harmony | 241 s (neighbours 95 s, UMAP 42 s) | 2.67 GB (3.49 GB) |
+
+**Memory per nucleus.** The peak is reached while the counts of all samples are stacked for HVG
+selection: about **1.6 GiB + 12 bytes per non-zero count** (18,439 → 92,195 nuclei added 0.9 GB,
+1,070–1,270 detected genes per nucleus). That is **~80,000 nuclei per GiB** at ~1,100 genes per
+nucleus, or ~35,000 per GiB at 2,500; 300 k nuclei × 30 k genes with 3,000 detected genes each
+need ~12 GiB, inside the 16 GiB default (the convention's target is 30 GiB). scVI adds the HVG
+counts copy (~8 bytes per HVG non-zero) and PyTorch (~0.9 GB here); on the gpu tier's 14 GiB that
+leaves room for ~200 k nuclei at 2,500 genes each (estimated, not run on a GPU).
+
+**Time.** Harmony itself takes seconds; the neighbour graph and UMAP dominate (~minutes per 100 k
+nuclei). scVI on CPU: ~1.9 s per epoch per 10,000 nuclei here (emulated; 1.6 s per epoch for
+20,204 nuclei native arm64 on 4 threads), and scvi-tools' default epochs fall with size (400 below
+20 k nuclei, 27 at 300 k), so a CPU scVI run is ~25 min at either end; on a T4 GPU it should be far
+less (not measured: no local GPU). The gpu image was built and imports torch 2.15.0+cu132,
+scvi-tools and harmonypy, and runs the fixture on CPU.
+
+Images: cpu 1.48 GB unpacked (457 MB compressed); gpu 5.9 GB unpacked (3.2 GB compressed).
 
 ## Running it locally
 

@@ -34,7 +34,7 @@ def write_sample(path: Path, sample_id: str, condition: str, counts: np.ndarray,
 
     n = counts.shape[0]
     obs = pd.DataFrame({"sample_id": pd.Categorical([sample_id] * n), "condition": pd.Categorical([condition] * n),
-                        "donor": pd.Categorical([f"d{sample_id[-1]}"] * n), "annotation": pd.Categorical(labels)},
+                        "subject_id": pd.Categorical([f"sub-{sample_id[-1]}"] * n), "annotation": pd.Categorical(labels)},
                        index=[f"{sample_id}:BC{i + 1:05d}-1" for i in range(n)])
     var = pd.DataFrame({"gene_ids": [f"ENSG{i:011d}" for i in range(len(gene_names))], "feature_types": "Gene Expression",
                         "mt": [g.startswith("MT-") for g in gene_names], "ribo": [g.startswith("RPL") for g in gene_names]},
