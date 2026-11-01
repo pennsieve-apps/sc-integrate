@@ -7,6 +7,11 @@ abstract: 'Joint integration and clustering of single-cell and single-nucleus RN
   a UMAP on the integrated embedding, with scib batch and cluster silhouette metrics before and after integration.'
 authors:
 - name: Pennsieve (University of Pennsylvania)
+contact:
+- given-names: Joost
+  family-names: Wagenaar
+  orcid: https://orcid.org/0009-0004-5925-5451
+  affiliation: University of Pennsylvania
 repository-code: https://github.com/pennsieve-apps/sc-integrate
 license: Apache-2.0
 version: 0.1.0
