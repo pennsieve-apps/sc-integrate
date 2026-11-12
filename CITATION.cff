@@ -26,9 +26,6 @@ keywords:
 - clustering
 - harmony
 - scvi
-- neuroscience
-- pain
-- musculoskeletal
 # The work this app implements; the release report's "How to cite" puts it first.
 preferred-citation:
   type: article

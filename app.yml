@@ -26,9 +26,6 @@ application:
     - clustering
     - harmony
     - scvi
-    - neuroscience
-    - pain
-    - musculoskeletal
 runtime:
   # Shared by both variants (below); these are the cpu variant's. All samples are held at once
   # (counts CSR float32 while choosing HVGs, then HVGs only). Measured in the linux/amd64 image
